@@ -12,8 +12,10 @@ Description: Prototype (working name). Reads LAS, LAZ and COPC files into the
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports:
+    jsonlite,
     meshcore,
-    rlas
+    rlas,
+    sf
 Suggests:
     cdtr,
     geometry,

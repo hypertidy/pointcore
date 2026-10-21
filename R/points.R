@@ -115,9 +115,11 @@ las_crs <- function(h) {
     if (!is.null(wkt) && nzchar(wkt)) crs <- wkt
   }
   for (v in vlr) {
+    ## GeoKeyDirectoryTag holds a list of keys; GeoAsciiParamsTag a string
     tags <- v[["tags"]]
-    if (is.null(tags)) next
+    if (!is.list(tags)) next
     for (t in tags) {
+      if (!is.list(t) || is.null(t$key)) next
       if (t$key == 3072L && is.na(crs)) crs <- paste0("EPSG:", t$`value offset`)
       if (t$key == 2048L && is.na(crs)) crs <- paste0("EPSG:", t$`value offset`)
       if (t$key == 4096L) vertical <- paste0("EPSG:", t$`value offset`)
