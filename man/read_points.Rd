@@ -4,16 +4,33 @@
 \alias{read_points}
 \title{Read LAS, LAZ or COPC files into the point-cloud form}
 \usage{
-read_points(dsn, filter = "", select = "*")
+read_points(
+  dsn,
+  filter = "",
+  select = "*",
+  engine = c("rlas", "pdal"),
+  stages = NULL,
+  bbox = NULL
+)
 }
 \arguments{
-\item{dsn}{One or more paths to LAS, LAZ or COPC files.}
+\item{dsn}{One or more paths to LAS, LAZ or COPC files. With
+`engine = "pdal"`, anything PDAL reads, including URLs.}
 
 \item{filter}{A LASlib filter string passed to [rlas::read.las()], for
 example `"-keep_class 2"`. Ids still count every point in the file, so a
-filtered read keeps the ids of a full read.}
+filtered read keeps the ids of a full read. rlas engine only.}
 
-\item{select}{A LASlib select string passed to [rlas::read.las()].}
+\item{select}{A LASlib select string passed to [rlas::read.las()]. rlas
+engine only.}
+
+\item{engine}{`"rlas"` or `"pdal"`.}
+
+\item{stages}{PDAL stages run after the reader: a character vector of
+JSON stage objects, or a list of lists. pdal engine only.}
+
+\item{bbox}{`c(xmin, ymin, xmax, ymax)` in the source's CRS: keep only
+returns inside it. pdal engine only.}
 }
 \value{
 A list of class `pointcore_points` with `points` and `sources`.
@@ -41,8 +58,27 @@ CRS comes from the file's WKT VLR, or else its GeoKey projected (3072) or
 geographic (2048) code, recorded as `"EPSG:<code>"`; a vertical code
 (4096) is recorded as `vertical_crs`.
 }
+\section{Engines}{
+
+`engine = "rlas"` (the default) reads through LASlib. `engine = "pdal"`
+runs a PDAL pipeline through the pdal package: the reader PDAL infers for
+each `dsn` (LAS, LAZ, COPC, EPT, E57, PLY, ... and URLs), then `stages`.
+Both give the same form with the same column names.
+
+With the pdal engine, `id` comes from PDAL's point table row, which for a
+file read in full is the point's position in the file, kept through
+filters that drop or reorder points. A window read by COPC or EPT
+(`bbox` with a `.copc.laz` or `ept.json` source) fetches only the nodes
+it needs, so there is no file position to record and `id` is `NA`.
+}
+
 \examples{
 f <- system.file("extdata", "example.laz", package = "rlas")
 p <- read_points(f)
 p
+if (requireNamespace("pdal", quietly = TRUE)) {
+  g <- read_points(f, engine = "pdal",
+                   stages = '{"type": "filters.range", "limits": "ReturnNumber[1:1]"}')
+  g
+}
 }

@@ -21,18 +21,54 @@
 #' geographic (2048) code, recorded as `"EPSG:<code>"`; a vertical code
 #' (4096) is recorded as `vertical_crs`.
 #'
-#' @param dsn One or more paths to LAS, LAZ or COPC files.
+#' @section Engines:
+#' `engine = "rlas"` (the default) reads through LASlib. `engine = "pdal"`
+#' runs a PDAL pipeline through the pdal package: the reader PDAL infers for
+#' each `dsn` (LAS, LAZ, COPC, EPT, E57, PLY, ... and URLs), then `stages`.
+#' Both give the same form with the same column names.
+#'
+#' With the pdal engine, `id` comes from PDAL's point table row, which for a
+#' file read in full is the point's position in the file, kept through
+#' filters that drop or reorder points. A window read by COPC or EPT
+#' (`bbox` with a `.copc.laz` or `ept.json` source) fetches only the nodes
+#' it needs, so there is no file position to record and `id` is `NA`.
+#'
+#' @param dsn One or more paths to LAS, LAZ or COPC files. With
+#'   `engine = "pdal"`, anything PDAL reads, including URLs.
 #' @param filter A LASlib filter string passed to [rlas::read.las()], for
 #'   example `"-keep_class 2"`. Ids still count every point in the file, so a
-#'   filtered read keeps the ids of a full read.
-#' @param select A LASlib select string passed to [rlas::read.las()].
+#'   filtered read keeps the ids of a full read. rlas engine only.
+#' @param select A LASlib select string passed to [rlas::read.las()]. rlas
+#'   engine only.
+#' @param engine `"rlas"` or `"pdal"`.
+#' @param stages PDAL stages run after the reader: a character vector of
+#'   JSON stage objects, or a list of lists. pdal engine only.
+#' @param bbox `c(xmin, ymin, xmax, ymax)` in the source's CRS: keep only
+#'   returns inside it. pdal engine only.
 #' @returns A list of class `pointcore_points` with `points` and `sources`.
 #' @export
 #' @examples
 #' f <- system.file("extdata", "example.laz", package = "rlas")
 #' p <- read_points(f)
 #' p
-read_points <- function(dsn, filter = "", select = "*") {
+#' if (requireNamespace("pdal", quietly = TRUE)) {
+#'   g <- read_points(f, engine = "pdal",
+#'                    stages = '{"type": "filters.range", "limits": "ReturnNumber[1:1]"}')
+#'   g
+#' }
+read_points <- function(dsn, filter = "", select = "*", engine = c("rlas", "pdal"),
+                        stages = NULL, bbox = NULL) {
+  engine <- match.arg(engine)
+  if (engine == "pdal") {
+    if (nzchar(filter) || !identical(select, "*")) {
+      stop("filter and select are LASlib strings for engine = \"rlas\"; ",
+           "with engine = \"pdal\" use stages, e.g. filters.range")
+    }
+    return(read_points_pdal(dsn, stages = stages, bbox = bbox))
+  }
+  if (!is.null(stages) || !is.null(bbox)) {
+    stop("stages and bbox need engine = \"pdal\"")
+  }
   dsn <- normalizePath(dsn, mustWork = TRUE)
   pts <- vector("list", length(dsn))
   src <- vector("list", length(dsn))
@@ -62,6 +98,15 @@ las_names <- c(X = "x", Y = "y", Z = "z", Intensity = "intensity",
                ScanAngle = "scan_angle", gpstime = "gps_time",
                R = "red", G = "green", B = "blue")
 
+## other attributes under the same names whichever engine reads them: the
+## snake_case of the LAS specification's field name
+las_extra <- c(ScanDirectionFlag = "scan_direction_flag",
+               EdgeOfFlightline = "edge_of_flight_line",
+               Synthetic_flag = "synthetic", Keypoint_flag = "key_point",
+               Withheld_flag = "withheld", Overlap_flag = "overlap",
+               UserData = "user_data", PointSourceID = "point_source_id",
+               ScannerChannel = "scanner_channel", NIR = "nir")
+
 las_to_points <- function(d, source, id) {
   known <- intersect(names(las_names), names(d))
   out <- d[known]
@@ -69,7 +114,8 @@ las_to_points <- function(d, source, id) {
   other <- setdiff(names(d), names(las_names))
   if (length(other)) {
     extra <- d[other]
-    names(extra) <- snake_case(other)
+    nm <- las_extra[other]
+    names(extra) <- ifelse(is.na(nm), snake_case(other), nm)
     out <- cbind(out, extra)
   }
   out$source <- rep(as.integer(source), nrow(out))
