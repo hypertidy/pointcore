@@ -16,6 +16,18 @@ tin <- points_tin(p, classes = NULL)   # classes = 2L (ground) by default
 fp <- face_points(tin, p, above = 2)   # returns within 2 m above the surface
 ```
 
+With `engine = "pdal"` the same form comes through a PDAL pipeline
+([hypertidy/pdal](https://github.com/hypertidy/pdal)): any format or URL
+PDAL reads, PDAL filters as `stages`, and a `bbox` that reads only the
+nodes it needs from COPC and EPT. Ids stay file positions through filters
+that drop or reorder points (and are `NA` for a COPC or EPT window).
+
+```r
+g <- read_points(f, engine = "pdal",
+                 stages = '{"type": "filters.range", "limits": "Classification[2:2]"}')
+w <- read_points("survey.copc.laz", engine = "pdal", bbox = c(xmin, ymin, xmax, ymax))
+```
+
 Survey-scale clouds come from Entwine Point Tiles by window, and the
 links summarise to one row per face:
 
